@@ -31,7 +31,8 @@ class TrackManager extends Component with HasGameRef<SpectraSprintGame> {
   void update(double dt) {
     super.update(dt);
 
-    if (gameRef.gameState != GameState.playing) return;
+    if (gameRef.gameState != GameState.playing || gameRef.isVictorySequence)
+      return;
 
     final speed = gameRef.currentSpeed / 500.0; // تحويل السرعة لمعدل Z
 
@@ -219,12 +220,53 @@ class TrackObstacle extends PositionComponent
 
     // توهج بلون المرحلة (Shadow Aura) في الأسفل
     final theme = gameRef.background.currentTheme;
+
+    // إذا كانت المرحلة هي خليج القراصنة، نرسم "حطام سفن" بدلاً من العقبات العادية
+    if (theme.name == 'PIRATE\'S COVE') {
+      _renderPirateDebris(canvas, rrect);
+      return;
+    }
+
     final auraPaint = Paint()
       ..color = theme.laneLineColor.withOpacity(0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawRRect(rrect, auraPaint);
+  }
+
+  void _renderPirateDebris(Canvas canvas, RRect rrect) {
+    final woodPaint = Paint()..color = const Color(0xFF5D4037); // Brown wood
+    final lightWoodPaint = Paint()..color = const Color(0xFF795548);
+
+    // Draw main plank
+    canvas.drawRRect(rrect, woodPaint);
+
+    // Draw some wooden grain/lines
+    final grainPaint = Paint()
+      ..color = const Color(0xFF3E2723)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1;
+
+    for (int i = 1; i < 4; i++) {
+      final y = size.y * (i / 4);
+      canvas.drawLine(Offset(0, y), Offset(size.x, y), grainPaint);
+    }
+
+    // Draw some "shattered" edges or extra planks
+    final extraPlankRect = Rect.fromLTWH(
+      size.x * 0.1,
+      -5,
+      size.x * 0.3,
+      size.y * 0.5,
+    );
+    canvas.drawRect(extraPlankRect, lightWoodPaint);
+    canvas.drawRect(extraPlankRect, grainPaint);
+
+    // Draw some rope or metal bands
+    final metalPaint = Paint()..color = Colors.grey;
+    canvas.drawRect(Rect.fromLTWH(size.x * 0.2, 0, 5, size.y), metalPaint);
+    canvas.drawRect(Rect.fromLTWH(size.x * 0.7, 0, 5, size.y), metalPaint);
   }
 
   @override
@@ -312,16 +354,39 @@ class Coin extends PositionComponent
   Future<void> onLoad() async {
     await super.onLoad();
     size = Vector2(30, 30);
-
-    add(
-      CircleComponent(
-        radius: 15,
-        paint: Paint()..color = Color(GameConstants.colorYellow),
-      ),
-    );
     add(CircleHitbox());
-
     _updateTransform();
+  }
+
+  @override
+  void render(Canvas canvas) {
+    super.render(canvas);
+
+    // رسم الدائرة الصفراء الأساسية
+    final paint = Paint()..color = Color(GameConstants.colorYellow);
+    canvas.drawCircle(Offset(size.x / 2, size.y / 2), size.x / 2, paint);
+
+    // رسم النجمة السوداء في المنتصف
+    final starPaint = Paint()..color = Colors.black;
+    final path = Path();
+    final double centerX = size.x / 2;
+    final double centerY = size.y / 2;
+    final double radius = size.x * 0.35;
+    final double innerRadius = radius * 0.4;
+
+    for (int i = 0; i < 10; i++) {
+      final double angle = i * pi / 5 - pi / 2;
+      final double r = (i % 2 == 0) ? radius : innerRadius;
+      final double x = centerX + r * cos(angle);
+      final double y = centerY + r * sin(angle);
+      if (i == 0) {
+        path.moveTo(x, y);
+      } else {
+        path.lineTo(x, y);
+      }
+    }
+    path.close();
+    canvas.drawPath(path, starPaint);
   }
 
   @override

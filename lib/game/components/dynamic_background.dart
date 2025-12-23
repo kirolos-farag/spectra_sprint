@@ -207,10 +207,7 @@ class _BackgroundLayer extends PositionComponent
     );
 
     // رسم الطريق والخطوط (إذا لم يكن متقطعاً أو كان بها حارة مختفية فقط)
-    if (!theme.isVanishingLane ||
-        background.safeStageTimer > 0 ||
-        theme.name != 'SHATTERED REALITY') {
-      // (نفس منطق رسم الطريق الحالي...)
+    if (!theme.isVanishingLane || background.safeStageTimer > 0) {
       _renderSolidRoad(
         canvas,
         sizeX,
@@ -218,7 +215,7 @@ class _BackgroundLayer extends PositionComponent
         roadColor,
         lineLineColor,
       );
-    } else if (theme.isVanishingLane) {
+    } else {
       // رسم الطريق بالكامل مع تظليل الحارة الخطيرة
       _renderSolidRoad(
         canvas,
@@ -236,13 +233,13 @@ class _BackgroundLayer extends PositionComponent
         Colors.red,
         true,
       );
-      // رسم الحارة المختفية (بيضاء)
+      // رسم الحارة المختفية (اللون المحدد في القالب، أصفر للمرحلة 7)
       _renderGlitchLane(
         canvas,
         sizeX,
         vanishingPointY,
         gameRef.vanishingLaneIndex,
-        Colors.white,
+        theme.vanishingLaneColor,
         false,
       );
     }

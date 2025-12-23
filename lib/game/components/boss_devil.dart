@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import '../../utils/constants.dart';
 import '../spectra_sprint_game.dart';
+import '../audio/audio_manager.dart';
 import 'fire_projectile.dart';
 
 class BossDevil extends PositionComponent with HasGameRef<SpectraSprintGame> {
@@ -73,6 +74,7 @@ class BossDevil extends PositionComponent with HasGameRef<SpectraSprintGame> {
     for (int i = 0; i < numFireballs; i++) {
       gameRef.world.add(FireProjectile(lanes[i]));
     }
+    AudioManager().playFireBreathSound();
   }
 
   @override

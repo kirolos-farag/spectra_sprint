@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../game/spectra_sprint_game.dart';
 import '../../data/game_data.dart';
+import '../../services/ad_service.dart';
 
 // شاشة نهاية اللعبة
 class GameOverOverlay extends StatefulWidget {
@@ -146,8 +147,26 @@ class _GameOverOverlayState extends State<GameOverOverlay> {
                                   'إعلان مجاني',
                                   const Color(0xFF00FF88),
                                   () {
-                                    setState(() => _isContinuing = true);
-                                    widget.game.continueWithAd();
+                                    if (!AdService().isRewardedAdReady) {
+                                      ScaffoldMessenger.of(
+                                        context,
+                                      ).showSnackBar(
+                                        const SnackBar(
+                                          content: Text(
+                                            'الإعلان غير جاهز بعد... يرجى المحاولة مرة أخرى ⏳',
+                                          ),
+                                          backgroundColor: Colors.orange,
+                                        ),
+                                      );
+                                      return;
+                                    }
+
+                                    AdService().showRewardedAd(
+                                      onRewardEarned: () {
+                                        setState(() => _isContinuing = true);
+                                        widget.game.continueWithAd();
+                                      },
+                                    );
                                   },
                                   Icons.ondemand_video,
                                 ),

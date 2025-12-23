@@ -4,11 +4,13 @@ import 'package:flame/game.dart';
 import 'data/game_data.dart';
 import 'game/audio/audio_manager.dart';
 import 'game/spectra_sprint_game.dart';
+import 'services/ad_service.dart';
 import 'ui/screens/main_menu.dart';
 import 'ui/overlays/game_hud.dart';
 import 'ui/overlays/pause_menu.dart';
 import 'ui/overlays/game_over.dart';
 import 'ui/overlays/death_sequence.dart';
+import 'ui/overlays/victory_overlay.dart';
 import 'utils/constants.dart';
 
 void main() async {
@@ -20,9 +22,10 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
-  // تهيئة البيانات والصوت
+  // تهيئة البيانات والصوت والإعلانات
   await GameData().init();
   await AudioManager().init();
+  await AdService().init();
 
   // تفعيل وضع الشاشة الكاملة الحقيقي (Immersive Mode) لإخفاء أي شريط علوي
   await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
@@ -67,6 +70,22 @@ class _GameWrapperState extends State<GameWrapper> {
   void initState() {
     super.initState();
     _initializeGame();
+
+    // إعداد الكول باك لإظهار الإعلان بمجرد تحميله في المرة الأولى
+    AdService().onAppOpenAdLoaded = () {
+      if (mounted && !_isPlaying) {
+        AdService().showAppOpenAd();
+        // تصفير الكول باك بعد العرض الأول لتجنب تكراره في أوقات غير مناسبة
+        AdService().onAppOpenAdLoaded = null;
+      }
+    };
+
+    // محاولة عرض الإعلان فوراً إذا كان جاهزاً (نادراً ما يحدث في الثانية الأولى)
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (AdService().isAppOpenAdReady) {
+        AdService().showAppOpenAd();
+      }
+    });
   }
 
   void _initializeGame() {
@@ -159,6 +178,16 @@ class _GameWrapperState extends State<GameWrapper> {
 
           if (game.gameState == GameState.gameOverSequence)
             DeathSequence(game: game),
+
+          if (game.gameState == GameState.victory)
+            VictoryOverlay(
+              game: game,
+              onRestart: () {
+                game.restartGame();
+                setState(() {});
+              },
+              onMainMenu: _returnToMenu,
+            ),
         ],
       ),
     );

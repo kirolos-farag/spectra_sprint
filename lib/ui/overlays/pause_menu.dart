@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../game/spectra_sprint_game.dart';
 import '../../data/game_data.dart';
 import '../../game/audio/audio_manager.dart';
+import '../../services/ad_service.dart';
 
 // قائمة الإيقاف المؤقت
 class PauseMenu extends StatefulWidget {
@@ -131,8 +132,22 @@ class _PauseMenuState extends State<PauseMenu> {
           const SizedBox(height: 12),
 
           _buildButton('قلب مجاني (إعلان)', const Color(0xFF00FF88), () async {
-            await widget.game.buyHeart(isAd: true);
-            setState(() {});
+            if (!AdService().isRewardedAdReady) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('الإعلان قيد التحميل... ⏳'),
+                  backgroundColor: Colors.orange,
+                ),
+              );
+              return;
+            }
+
+            AdService().showRewardedAd(
+              onRewardEarned: () async {
+                await widget.game.buyHeart(isAd: true);
+                setState(() {});
+              },
+            );
           }, Icons.ondemand_video),
           const SizedBox(height: 12),
           // --------------------------

@@ -54,6 +54,9 @@ class GameConstants {
   static const int colorShadow = 0xFFFF00FF; // فوشيا نيون ليكون واضحاً جداً
   static const int colorLight = 0xFFFFFBE6;
   static const int colorRoad = 0xFF1A1033; // لون طريق أفتح قليلاً للوضوح
+
+  // ميزة المطور: ابدأ من مرحلة معينة (0 = البداية)
+  static const int debugStartStage = 0;
 }
 
 // أنواع الألوان/القدرات
@@ -65,7 +68,14 @@ enum PlayerColor {
 }
 
 // حالة اللعبة
-enum GameState { mainMenu, playing, paused, gameOverSequence, gameOver }
+enum GameState {
+  mainMenu,
+  playing,
+  paused,
+  gameOverSequence,
+  gameOver,
+  victory,
+}
 
 // أنواع العوائق
 enum ObstacleType {

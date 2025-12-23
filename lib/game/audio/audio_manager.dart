@@ -1,26 +1,36 @@
-import 'package:audioplayers/audioplayers.dart';
+import 'package:flutter/foundation.dart';
+import 'package:flame_audio/flame_audio.dart';
 import '../../data/game_data.dart';
 
-// إدارة الصوتيات التفاعلية
+// إدارة الصوتيات التفاعلية باستخدام FlameAudio
 class AudioManager {
   static final AudioManager _instance = AudioManager._internal();
   factory AudioManager() => _instance;
   AudioManager._internal();
 
-  // مشغلات الصوت
-  final AudioPlayer _musicPlayer = AudioPlayer();
-  final AudioPlayer _sfxPlayer = AudioPlayer();
-
   // حالة الصوت
   bool _initialized = false;
   double _currentSpeed = 1.0;
+
+  // نظام خنق الأصوات (Throttling) لمنع الضغط العالي
+  final Map<String, int> _lastPlayTime = {};
+  static const int _sfxCooldownMs = 50; // الحد الأدنى بين كل صوتين من نفس النوع
 
   // تهيئة نظام الصوت
   Future<void> init() async {
     if (_initialized) return;
 
-    // إعداد مشغل الموسيقى للتكرار
-    _musicPlayer.setReleaseMode(ReleaseMode.loop);
+    // تحميل المؤثرات الصوتية مسبقاً في الذاكرة لتجنب التأخير
+    try {
+      await FlameAudio.audioCache.loadAll([
+        'sfx/jump.wav',
+        'sfx/collect.wav',
+        'sfx/collision.wav',
+        'sfx/color_change.wav',
+      ]);
+    } catch (e) {
+      debugPrint('Error preloading SFX: $e');
+    }
 
     _initialized = true;
   }
@@ -30,28 +40,33 @@ class AudioManager {
     if (!GameData().musicEnabled) return;
 
     try {
-      // تم إلغاء التعليق لتشغيل الموسيقى
-      await _musicPlayer.play(AssetSource('audio/music/background.mp3'));
-      await _musicPlayer.setVolume(0.4);
+      // استخدام FlameAudio.bgm للبدء والتكرار تلقائياً
+      if (!FlameAudio.bgm.isPlaying) {
+        await FlameAudio.bgm.play('music/background.mp3', volume: 0.4);
+      }
     } catch (e) {
-      print('Error playing background music: $e');
+      debugPrint('Error playing background music: $e');
     }
   }
 
   // إيقاف الموسيقى
   Future<void> stopMusic() async {
-    await _musicPlayer.stop();
+    if (FlameAudio.bgm.isPlaying) {
+      await FlameAudio.bgm.stop();
+    }
   }
 
   // إيقاف مؤقت للموسيقى
   Future<void> pauseMusic() async {
-    await _musicPlayer.pause();
+    if (FlameAudio.bgm.isPlaying) {
+      await FlameAudio.bgm.pause();
+    }
   }
 
   // استئناف الموسيقى
   Future<void> resumeMusic() async {
     if (!GameData().musicEnabled) return;
-    await _musicPlayer.resume();
+    await FlameAudio.bgm.resume();
   }
 
   // تغيير سرعة الموسيقى حسب سرعة اللعبة
@@ -61,19 +76,33 @@ class AudioManager {
 
     if (playbackRate != _currentSpeed) {
       _currentSpeed = playbackRate;
-      await _musicPlayer.setPlaybackRate(_currentSpeed);
+      // FlameAudio.bgm.audioPlayer يتيح الوصول المباشر للمشغل الأساسي
+      try {
+        await FlameAudio.bgm.audioPlayer.setPlaybackRate(_currentSpeed);
+      } catch (e) {
+        debugPrint('Error updating music speed: $e');
+      }
     }
   }
 
-  // تشغيل مؤثر صوتي
-  Future<void> playSfx(String sfxName) async {
+  // تشغيل مؤثر صوتي (يسمح بتعدد الأصوات المتزامنة)
+  Future<void> playSfx(String sfxName, {String extension = 'wav'}) async {
     if (!GameData().sfxEnabled) return;
 
+    // التحقق من نظام الخنق (Throttling)
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastTime = _lastPlayTime[sfxName] ?? 0;
+
+    if (now - lastTime < _sfxCooldownMs) {
+      return; // تجاهل الصوت إذا كان سريعاً جداً
+    }
+    _lastPlayTime[sfxName] = now;
+
     try {
-      // سيتم استبدال هذا بملفات صوتية حقيقية لاحقاً
-      // await _sfxPlayer.play(AssetSource('audio/sfx/$sfxName.wav'));
+      // FlameAudio.play يقوم بإنشاء مشغل جديد تلقائياً لكل صوت (Pooling)
+      await FlameAudio.play('sfx/$sfxName.$extension');
     } catch (e) {
-      print('Error playing SFX: $e');
+      debugPrint('Error playing SFX ($sfxName): $e');
     }
   }
 
@@ -84,9 +113,29 @@ class AudioManager {
   Future<void> playColorChangeSound() => playSfx('color_change');
   Future<void> playAbilityActivateSound() => playSfx('ability_activate');
 
+  // أصوات المراحل الجديدة
+  Future<void> playLaserSound() async {
+    // الليزر يحتاج مهلة أطول (ثانيتين) لمنع التكرار المزعج
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final lastTime = _lastPlayTime['laser-beams'] ?? 0;
+    if (now - lastTime < 2000) return;
+
+    return playSfx('laser-beams', extension: 'mp3');
+  }
+
+  Future<void> playFireBreathSound() => playSfx('fire-breath');
+  Future<void> playAliensSound() => playSfx('aliens');
+  Future<void> playMummyZombieSound() => playSfx('mummy-zombie');
+
+  // أصوات المرحلة الثامنة (Pirate's Cove)
+  Future<void> playCannonSound() => playSfx('cannon-fire');
+
+  // صوت بداية المشهد الجديد
+  Future<void> playStageStartSound() =>
+      playSfx('color_change', extension: 'mp3');
+
   // تنظيف الموارد
-  Future<void> dispose() async {
-    await _musicPlayer.dispose();
-    await _sfxPlayer.dispose();
+  void dispose() {
+    FlameAudio.bgm.dispose();
   }
 }

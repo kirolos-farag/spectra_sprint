@@ -16,6 +16,8 @@ class StageTheme {
   final Color voidColorEnd;
   final bool isVanishingLane; // هل هناك حارة تختفي (تصبح بيضاء وخطيرة)؟
   final bool isFragmented; // هل الطريق متقطع (يظهر ويختفي)؟
+  final bool isBossStage;
+  final Color vanishingLaneColor;
 
   const StageTheme({
     required this.name,
@@ -32,7 +34,6 @@ class StageTheme {
     this.isVanishingLane = false,
     this.isFragmented = false,
     this.isBossStage = false,
+    this.vanishingLaneColor = Colors.white,
   });
-
-  final bool isBossStage;
 }

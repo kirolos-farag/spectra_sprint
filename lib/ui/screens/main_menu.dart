@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../data/game_data.dart';
+import '../../services/ad_service.dart';
 import '../../utils/constants.dart';
 
 // شاشة القائمة الرئيسية
@@ -54,6 +55,9 @@ class _MainMenuState extends State<MainMenu> {
                           const SizedBox(height: 30),
                           // متجر القلوب
                           _buildHeartShop(),
+                          const SizedBox(height: 20),
+                          // وضع اللعب
+                          _buildModeToggle(),
                           const SizedBox(height: 40),
                           // معلومات إضافية
                           _buildFooter(),
@@ -114,49 +118,120 @@ class _MainMenuState extends State<MainMenu> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Row(
-            children: [
-              const Icon(Icons.favorite, color: Color(0xFFFF0054), size: 28),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'الأرواح الإضافية',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  Text(
-                    'لديك: $extraLives',
-                    style: const TextStyle(color: Colors.white54, fontSize: 14),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          ElevatedButton(
-            onPressed: _buyHeart,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFFEC00),
-              foregroundColor: Colors.black,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(15),
-              ),
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            ),
+          Expanded(
             child: Row(
               children: [
-                const Icon(Icons.stars, size: 16),
-                const SizedBox(width: 4),
-                Text('${GameConstants.coinHeartCost}'),
+                const Icon(Icons.favorite, color: Color(0xFFFF0054), size: 28),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Text(
+                        'الأرواح الإضافية',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        'لديك: $extraLives',
+                        style: const TextStyle(
+                          color: Colors.white54,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
+          const SizedBox(width: 10),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ElevatedButton(
+                onPressed: _buyHeart,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFFFFEC00),
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(Icons.stars, size: 16),
+                    const SizedBox(width: 4),
+                    Text('${GameConstants.coinHeartCost}'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: _showRewardedAd,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF00D9FF),
+                  foregroundColor: Colors.black,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(15),
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.play_circle_fill, size: 16),
+                    SizedBox(width: 4),
+                    Text('مجاني (إعلان)'),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ],
       ),
+    );
+  }
+
+  void _showRewardedAd() {
+    if (!AdService().isRewardedAdReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('الإعلان جاري التحميل... يرجى المحاولة بعد لحظات ⏳'),
+          backgroundColor: Colors.orange,
+          duration: Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+
+    AdService().showRewardedAd(
+      onRewardEarned: () async {
+        // إضافة قلب مجاني
+        await GameData().addFreeLife();
+        if (mounted) {
+          setState(() {});
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('مبروك! حصلت على قلب إضافي مجاني ❤️'),
+              backgroundColor: Color(0xFF00D9FF),
+            ),
+          );
+        }
+      },
     );
   }
 
@@ -279,6 +354,52 @@ class _MainMenuState extends State<MainMenu> {
           const Text(
             'اسحب للقفز، ولليمين/اليسار للحركة',
             style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModeToggle() {
+    final isRandom = GameData().randomMode;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      margin: const EdgeInsets.symmetric(horizontal: 60),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: isRandom ? const Color(0xFF00D9FF) : Colors.white12,
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                isRandom ? 'وضع عشوائي 🎲' : 'وضع القصة 📖',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+              Text(
+                isRandom ? 'مراحل غير مرتبة' : 'مراحل متتالية',
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+            ],
+          ),
+          Switch(
+            value: isRandom,
+            onChanged: (value) async {
+              await GameData().toggleRandomMode();
+              setState(() {});
+            },
+            activeColor: const Color(0xFF00D9FF),
           ),
         ],
       ),

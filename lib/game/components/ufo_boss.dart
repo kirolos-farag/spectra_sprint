@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'dart:math';
 import '../../utils/constants.dart';
 import '../spectra_sprint_game.dart';
+import '../audio/audio_manager.dart';
 import 'alien_projectile.dart';
 
 class UfoBoss extends PositionComponent with HasGameRef<SpectraSprintGame> {
@@ -52,6 +53,7 @@ class UfoBoss extends PositionComponent with HasGameRef<SpectraSprintGame> {
     for (int i = 0; i < numAliens; i++) {
       gameRef.world.add(AlienProjectile(lanes[i]));
     }
+    AudioManager().playAliensSound();
   }
 
   @override
