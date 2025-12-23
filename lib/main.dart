@@ -118,9 +118,13 @@ class _GameWrapperState extends State<GameWrapper> {
   }
 
   void _startGame() {
-    setState(() {
-      _isPlaying = true;
-    });
+    AdService().showInterstitialAd(
+      onAdDismissed: () {
+        setState(() {
+          _isPlaying = true;
+        });
+      },
+    );
   }
 
   void _returnToMenu() {

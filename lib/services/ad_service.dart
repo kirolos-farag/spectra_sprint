@@ -1,14 +1,18 @@
-import 'dart:io';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
-class AdService {
+class AdService with WidgetsBindingObserver {
   static final AdService _instance = AdService._internal();
   factory AdService() => _instance;
   AdService._internal();
 
   AppOpenAd? _appOpenAd;
   bool _isShowingAppOpenAd = false;
+  DateTime? _appOpenLoadTime;
+
+  InterstitialAd? _interstitialAd;
+  bool _isInterstitialAdLoading = false;
 
   RewardedAd? _rewardedAd;
   bool _isRewardedAdLoading = false;
@@ -22,12 +26,16 @@ class AdService {
 
   // Test IDs for Android (Swap with real IDs in production)
   static const String _appOpenTestId = 'ca-app-pub-3940256099942544/9257395923';
+  static const String _interstitialTestId =
+      'ca-app-pub-3940256099942544/1033173712';
   static const String _rewardedTestId =
       'ca-app-pub-3940256099942544/5224354917';
 
   Future<void> init() async {
     await MobileAds.instance.initialize();
+    WidgetsBinding.instance.addObserver(this);
     _loadAppOpenAd();
+    _loadInterstitialAd();
     _loadRewardedAd();
   }
 
@@ -41,6 +49,7 @@ class AdService {
         onAdLoaded: (ad) {
           debugPrint('AppOpenAd Loaded!');
           _appOpenAd = ad;
+          _appOpenLoadTime = DateTime.now();
           onAppOpenAdLoaded?.call();
         },
         onAdFailedToLoad: (error) {
@@ -50,9 +59,16 @@ class AdService {
     );
   }
 
+  // Check if ad is still valid (must be < 4 hours old)
+  bool _isAdAvailable() {
+    return _appOpenAd != null &&
+        _appOpenLoadTime != null &&
+        DateTime.now().difference(_appOpenLoadTime!).inHours < 4;
+  }
+
   void showAppOpenAd() {
-    if (_appOpenAd == null) {
-      debugPrint('AppOpenAd not ready, trying to load...');
+    if (!_isAdAvailable()) {
+      debugPrint('AppOpenAd not ready or expired, trying to load...');
       _loadAppOpenAd();
       return;
     }
@@ -77,6 +93,63 @@ class AdService {
     );
 
     _appOpenAd!.show();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      showAppOpenAd();
+    }
+  }
+
+  // --- Interstitial Ad Logic ---
+
+  void _loadInterstitialAd() {
+    if (_isInterstitialAdLoading) return;
+    _isInterstitialAdLoading = true;
+
+    InterstitialAd.load(
+      adUnitId: _interstitialTestId,
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) {
+          debugPrint('InterstitialAd Loaded!');
+          _interstitialAd = ad;
+          _isInterstitialAdLoading = false;
+        },
+        onAdFailedToLoad: (error) {
+          debugPrint('InterstitialAd failed to load: $error');
+          _isInterstitialAdLoading = false;
+        },
+      ),
+    );
+  }
+
+  void showInterstitialAd({required VoidCallback onAdDismissed}) {
+    if (_interstitialAd == null) {
+      debugPrint('InterstitialAd not ready, calling callback directly.');
+      onAdDismissed();
+      _loadInterstitialAd();
+      return;
+    }
+
+    _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdDismissedFullScreenContent: (ad) {
+        ad.dispose();
+        _interstitialAd = null;
+        onAdDismissed();
+        _loadInterstitialAd();
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        ad.dispose();
+        _interstitialAd = null;
+        onAdDismissed();
+        _loadInterstitialAd();
+      },
+    );
+
+    _interstitialAd!.show();
   }
 
   // --- Rewarded Ad Logic ---

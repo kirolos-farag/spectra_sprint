@@ -15,7 +15,7 @@ if (keystorePropertiesFile.exists()) {
 }
 
 android {
-    namespace = "com.example.spectra_sprint"
+    namespace = "com.kirolosfarag.spectra_sprint"
     compileSdk = flutter.compileSdkVersion
     ndkVersion = flutter.ndkVersion
 
