@@ -4,13 +4,18 @@ import 'package:flutter/material.dart';
 import '../../utils/constants.dart';
 import '../spectra_sprint_game.dart';
 
+import 'package:spectra_sprint/game/stages/stage_config.dart';
+import 'package:spectra_sprint/game/stages/stage_registry.dart';
+
 class DynamicBackground extends Component with HasGameRef<SpectraSprintGame> {
   // طبقات الخلفية
   late List<_BackgroundLayer> layers;
 
-  // اللون الحالي
-  Color currentColor = const Color(0xFF0A001A);
-  double colorTransition = 0;
+  // إدارة المراحل
+  StageTheme currentTheme = StageRegistry.getStage(0);
+  StageTheme? targetTheme;
+  double themeTransitionProgress = 1.0; // 1.0 يعني اكتمال الانتقال
+  double safeStageTimer = 0.0; // وقت حماية في بداية المرحلة (للطريق)
 
   @override
   Future<void> onLoad() async {
@@ -32,10 +37,36 @@ class DynamicBackground extends Component with HasGameRef<SpectraSprintGame> {
   void update(double dt) {
     super.update(dt);
 
-    // تحديث انتقال الألوان - يتأثر بسرعة اللاعب
-    final speedMultiplier = gameRef.currentSpeed / GameConstants.baseSpeed;
-    colorTransition += dt * 0.3 * speedMultiplier;
-    if (colorTransition > 1) colorTransition = 0;
+    // تحديث مؤقت الحماية
+    if (safeStageTimer > 0) {
+      safeStageTimer -= dt;
+    }
+
+    // تحديث انتقال المراحل (نعومة الانتقال بين الألوان)
+    if (themeTransitionProgress < 1.0) {
+      themeTransitionProgress += dt * 0.5; // يستغرق الانتقال ثانيتين
+      if (themeTransitionProgress >= 1.0) {
+        themeTransitionProgress = 1.0;
+        if (targetTheme != null) {
+          currentTheme = targetTheme!;
+          targetTheme = null;
+        }
+      }
+    }
+  }
+
+  // تغيير المرحلة
+  void setStage(StageTheme newTheme) {
+    if (newTheme.name == currentTheme.name) return;
+    targetTheme = newTheme;
+    themeTransitionProgress = 0.0;
+
+    // إذا كانت المرحلة الجديدة متقطعة، نعطي 5 ثواني طريق سليم كبداية آمنة
+    if (newTheme.isFragmented) {
+      safeStageTimer = 5.0;
+    } else {
+      safeStageTimer = 0.0;
+    }
   }
 
   // تحديث السرعة
@@ -108,22 +139,34 @@ class _BackgroundLayer extends PositionComponent
     // هامش أمان للهزة لمنع ظهور حواف سوداء
     const double margin = 50.0;
 
-    // رسم فراغ ملون متدرج (Vibrant Gradient Void) بمساحة أكبر من الشاشة
-    final baseHue = (gameRef.elapsedTime * 30) % 360;
-    final color1 = HSVColor.fromAHSV(1.0, baseHue, 0.8, 0.4).toColor();
-    final color2 = HSVColor.fromAHSV(
-      1.0,
-      (baseHue + 40) % 360,
-      0.8,
-      0.3,
-    ).toColor();
-    final color3 = HSVColor.fromAHSV(
-      1.0,
-      (baseHue + 80) % 360,
-      0.8,
-      0.2,
-    ).toColor();
+    // حساب الألوان الحالية بناءً على التقدم في الانتقال
+    final background = gameRef.background;
+    final theme = background.currentTheme;
+    final t = background.themeTransitionProgress;
 
+    // دالة مساعدة لخلط الألوان
+    Color mix(Color c1, Color c2) => Color.lerp(c1, c2, t)!;
+
+    final roadColor = background.targetTheme != null
+        ? mix(theme.roadColor, background.targetTheme!.roadColor)
+        : theme.roadColor;
+    final skyColorTop = background.targetTheme != null
+        ? mix(theme.skyColorTop, background.targetTheme!.skyColorTop)
+        : theme.skyColorTop;
+    final skyColorBottom = background.targetTheme != null
+        ? mix(theme.skyColorBottom, background.targetTheme!.skyColorBottom)
+        : theme.skyColorBottom;
+    final voidColorStart = background.targetTheme != null
+        ? mix(theme.voidColorStart, background.targetTheme!.voidColorStart)
+        : theme.voidColorStart;
+    final voidColorEnd = background.targetTheme != null
+        ? mix(theme.voidColorEnd, background.targetTheme!.voidColorEnd)
+        : theme.voidColorEnd;
+    final lineLineColor = background.targetTheme != null
+        ? mix(theme.laneLineColor, background.targetTheme!.laneLineColor)
+        : theme.laneLineColor;
+
+    // رسم فراغ ملون متدرج (Vibrant Gradient Void) بمساحة أكبر من الشاشة
     final voidRect = Rect.fromLTWH(
       -margin,
       -margin,
@@ -134,7 +177,7 @@ class _BackgroundLayer extends PositionComponent
       ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [color1, color2, color3],
+        colors: [voidColorStart, voidColorEnd],
       ).createShader(voidRect);
     canvas.drawRect(voidRect, voidPaint);
 
@@ -146,57 +189,165 @@ class _BackgroundLayer extends PositionComponent
       vanishingPointY + margin,
     );
 
-    final hue = (gameRef.elapsedTime * 20) % 360;
-    final skyColor1 = HSVColor.fromAHSV(1.0, hue, 0.9, 0.4).toColor();
-    final skyColor2 = HSVColor.fromAHSV(
-      1.0,
-      (hue + 60) % 360,
-      0.9,
-      0.2,
-    ).toColor();
-
     final skyPaint = Paint()
       ..shader = LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [skyColor1, skyColor2],
+        colors: [skyColorTop, skyColorBottom],
       ).createShader(skyRect);
     canvas.drawRect(skyRect, skyPaint);
 
-    // رسم الطريق (شبه منحرف) - مع توسيع القاعدة لتغطية الهزة
-    final trackHorizonWidth = sizeX * GameConstants.trackHorizonWidthFactor;
-    final roadPath = Path();
-    roadPath.moveTo(sizeX / 2 - trackHorizonWidth / 2, vanishingPointY);
-    roadPath.lineTo(sizeX / 2 + trackHorizonWidth / 2, vanishingPointY);
-    roadPath.lineTo(sizeX + margin, sizeY + margin); // توسيع لليمين
-    roadPath.lineTo(-margin, sizeY + margin); // توسيع لليسار
-    roadPath.close();
-
     // رسم النجوم (فوق الخلفية وتحت الطريق)
-    _renderStars(canvas, sizeX, sizeY, vanishingPointY, trackHorizonWidth);
+    _renderStars(
+      canvas,
+      sizeX,
+      sizeY,
+      vanishingPointY,
+      sizeX * GameConstants.trackHorizonWidthFactor,
+    );
 
-    // رسم الطريق (لون أسفلت غامق واقعي)
-    final roadPaint = Paint()
-      ..color = const Color(0xFF1A1A1A); // رمادي غامق جداً (أسفلت)
+    // رسم الطريق والخطوط (إذا لم يكن متقطعاً أو كان بها حارة مختفية فقط)
+    if (!theme.isVanishingLane ||
+        background.safeStageTimer > 0 ||
+        theme.name != 'SHATTERED REALITY') {
+      // (نفس منطق رسم الطريق الحالي...)
+      _renderSolidRoad(
+        canvas,
+        sizeX,
+        vanishingPointY,
+        roadColor,
+        lineLineColor,
+      );
+    } else if (theme.isVanishingLane) {
+      // رسم الطريق بالكامل مع تظليل الحارة الخطيرة
+      _renderSolidRoad(
+        canvas,
+        sizeX,
+        vanishingPointY,
+        roadColor,
+        lineLineColor,
+      );
+      // رسم حارة التحذير (حمراء)
+      _renderGlitchLane(
+        canvas,
+        sizeX,
+        vanishingPointY,
+        gameRef.warningLaneIndex,
+        Colors.red,
+        true,
+      );
+      // رسم الحارة المختفية (بيضاء)
+      _renderGlitchLane(
+        canvas,
+        sizeX,
+        vanishingPointY,
+        gameRef.vanishingLaneIndex,
+        Colors.white,
+        false,
+      );
+    }
+  }
+
+  void _renderSolidRoad(
+    Canvas canvas,
+    double sizeX,
+    double vanishingPointY,
+    Color roadColor,
+    Color lineLineColor,
+  ) {
+    final trackHorizonWidth = sizeX * GameConstants.trackHorizonWidthFactor;
+    final roadPaint = Paint()..color = roadColor;
+    final roadPath = Path();
+    roadPath.moveTo(0, gameRef.size.y);
+    roadPath.lineTo(gameRef.size.x, gameRef.size.y);
+    roadPath.lineTo(
+      gameRef.size.x / 2 + trackHorizonWidth / 2,
+      vanishingPointY,
+    );
+    roadPath.lineTo(
+      gameRef.size.x / 2 - trackHorizonWidth / 2,
+      vanishingPointY,
+    );
+    roadPath.close();
     canvas.drawPath(roadPath, roadPaint);
 
-    // رسم خطوط المسارات (خطوط بيضاء ناصعة)
     final linePaint = Paint()
-      ..color = Colors.white.withOpacity(1.0)
+      ..color = lineLineColor.withOpacity(0.5)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 4;
+      ..strokeWidth = 2;
 
-    for (int i = 1; i <= 2; i++) {
-      final xTop =
-          (sizeX / 2 - trackHorizonWidth / 2) + i * (trackHorizonWidth / 3);
-      final xBottom = i * (sizeX / 3);
-
+    for (int i = 1; i < GameConstants.numberOfLanes; i++) {
+      final ratio = i / GameConstants.numberOfLanes;
+      final startX =
+          (gameRef.size.x / 2 - trackHorizonWidth / 2) +
+          trackHorizonWidth * ratio;
+      final endX = gameRef.size.x * ratio;
       canvas.drawLine(
-        Offset(xTop, vanishingPointY),
-        Offset(xBottom, sizeY + margin), // زيادة الطول لتجنب الفراغات
+        Offset(startX, vanishingPointY),
+        Offset(endX, gameRef.size.y),
         linePaint,
       );
     }
+  }
+
+  void _renderGlitchLane(
+    Canvas canvas,
+    double sizeX,
+    double vanishingPointY,
+    int laneIndex,
+    Color color,
+    bool isWarning,
+  ) {
+    if (laneIndex < 0) return;
+
+    final trackHorizonWidth = sizeX * GameConstants.trackHorizonWidthFactor;
+
+    // تأثير وميض
+    final flashOpacity = isWarning
+        ? 0.2 +
+              (sin(gameRef.elapsedTime * 15) * 0.1) // وميض أبطأ للتحذير
+        : 0.3 + (sin(gameRef.elapsedTime * 20) * 0.2); // وميض سريع للخطر
+
+    final glitchPaint = Paint()
+      ..color = color.withOpacity(flashOpacity)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, isWarning ? 5 : 10);
+
+    final laneWidthStart = trackHorizonWidth / 3;
+    final laneWidthEnd = sizeX / 3;
+
+    final startX =
+        (gameRef.size.x / 2 - trackHorizonWidth / 2) +
+        (laneIndex * laneWidthStart);
+    final endX = laneIndex * laneWidthEnd;
+
+    final path = Path();
+    path.moveTo(startX, vanishingPointY);
+    path.lineTo(startX + laneWidthStart, vanishingPointY);
+    path.lineTo(endX + laneWidthEnd, gameRef.size.y);
+    path.lineTo(endX, gameRef.size.y);
+    path.close();
+
+    canvas.drawPath(path, glitchPaint);
+
+    // رسم حدود ملونة
+    final borderPaint = Paint()
+      ..color = color.withOpacity(0.8)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = isWarning ? 5 : 3; // حدود أعرض للتحذير
+
+    // إذا كان تحذير، نضيف بريق أحمر خارجي
+    if (isWarning) {
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = Colors.red.withOpacity(0.4)
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 10
+          ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10),
+      );
+    }
+
+    canvas.drawPath(path, borderPaint);
   }
 
   void updateSpeed(double speedRatio) {

@@ -3,7 +3,7 @@ import '../../game/spectra_sprint_game.dart';
 import '../../data/game_data.dart';
 
 // شاشة نهاية اللعبة
-class GameOverOverlay extends StatelessWidget {
+class GameOverOverlay extends StatefulWidget {
   final SpectraSprintGame game;
   final VoidCallback onRestart;
   final VoidCallback onMainMenu;
@@ -16,8 +16,15 @@ class GameOverOverlay extends StatelessWidget {
   });
 
   @override
+  State<GameOverOverlay> createState() => _GameOverOverlayState();
+}
+
+class _GameOverOverlayState extends State<GameOverOverlay> {
+  bool _isContinuing = false;
+
+  @override
   Widget build(BuildContext context) {
-    final isNewHighScore = game.isNewHighScore;
+    final isNewHighScore = widget.game.isNewHighScore;
 
     return Container(
       color: Colors.black.withOpacity(0.9),
@@ -25,21 +32,22 @@ class GameOverOverlay extends StatelessWidget {
         child: LayoutBuilder(
           builder: (context, constraints) {
             return SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 24),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 48,
+                ),
                 child: Center(
                   child: Container(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 32,
-                    ),
+                    width: 340,
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
+                      horizontal: 20,
                       vertical: 32,
                     ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF1A0033),
-                      borderRadius: BorderRadius.circular(20),
+                      borderRadius: BorderRadius.circular(25),
                       border: Border.all(
                         color: isNewHighScore
                             ? const Color(0xFFFFEC00)
@@ -68,7 +76,7 @@ class GameOverOverlay extends StatelessWidget {
                             color: isNewHighScore
                                 ? const Color(0xFFFFEC00)
                                 : const Color(0xFFFF0054),
-                            fontSize: 48,
+                            fontSize: 40,
                             fontWeight: FontWeight.bold,
                             letterSpacing: 4,
                           ),
@@ -81,14 +89,14 @@ class GameOverOverlay extends StatelessWidget {
                               Icon(
                                 Icons.star,
                                 color: Color(0xFFFFEC00),
-                                size: 32,
+                                size: 24,
                               ),
                               SizedBox(width: 8),
                               Text(
                                 'رقم قياسي جديد!',
                                 style: TextStyle(
                                   color: Color(0xFFFFEC00),
-                                  fontSize: 24,
+                                  fontSize: 18,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -96,56 +104,106 @@ class GameOverOverlay extends StatelessWidget {
                               Icon(
                                 Icons.star,
                                 color: Color(0xFFFFEC00),
-                                size: 32,
+                                size: 24,
                               ),
                             ],
                           ),
                         ],
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 32),
+
+                        // --- خيارات المتابعة (Continue) ---
+                        if (!_isContinuing) ...[
+                          const Text(
+                            'هل تريد المتابعة؟',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 18,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              // استخدام قلب احتياطي
+                              if (GameData().extraLives > 0)
+                                Expanded(
+                                  child: _buildContinueButton(
+                                    'استخدم قلب (${GameData().extraLives})',
+                                    const Color(0xFFFF0054),
+                                    () {
+                                      setState(() => _isContinuing = true);
+                                      widget.game.continueGame();
+                                    },
+                                    Icons.favorite,
+                                  ),
+                                ),
+                              if (GameData().extraLives > 0)
+                                const SizedBox(width: 12),
+
+                              // مشاهدة إعلان
+                              Expanded(
+                                child: _buildContinueButton(
+                                  'إعلان مجاني',
+                                  const Color(0xFF00FF88),
+                                  () {
+                                    setState(() => _isContinuing = true);
+                                    widget.game.continueWithAd();
+                                  },
+                                  Icons.ondemand_video,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 24),
+                          const Divider(color: Colors.white24),
+                          const SizedBox(height: 24),
+                        ],
+
                         // النتيجة
                         _buildStatRow(
                           'النقاط',
-                          '${game.score}',
+                          '${widget.game.score}',
                           const Color(0xFF00D9FF),
                           Icons.stars,
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                         _buildStatRow(
                           'المسافة',
-                          '${game.distance.toInt()} م',
+                          '${widget.game.distance.toInt()} م',
                           const Color(0xFFB536FF),
                           Icons.straighten,
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                         _buildStatRow(
                           'العملات',
-                          '${game.coinsCollected}',
+                          '${widget.game.coinsCollected}',
                           const Color(0xFFFFEC00),
                           Icons.monetization_on,
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 12),
                         _buildStatRow(
                           'أعلى نتيجة',
                           '${GameData().highScore}',
                           const Color(0xFFFF0054),
                           Icons.emoji_events,
                         ),
-                        const SizedBox(height: 40),
-                        // أزرار
+                        const SizedBox(height: 32),
+
+                        // أزرار التحكم الأساسية
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            _buildButton(
+                            _buildActionButton(
                               'إعادة',
                               const Color(0xFF00D9FF),
-                              onRestart,
+                              widget.onRestart,
                               Icons.refresh,
                             ),
                             const SizedBox(width: 16),
-                            _buildButton(
+                            _buildActionButton(
                               'القائمة',
                               const Color(0xFFB536FF),
-                              onMainMenu,
+                              widget.onMainMenu,
                               Icons.home,
                             ),
                           ],
@@ -164,22 +222,22 @@ class GameOverOverlay extends StatelessWidget {
 
   Widget _buildStatRow(String label, String value, Color color, IconData icon) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
       decoration: BoxDecoration(
         color: Colors.black.withOpacity(0.4),
         borderRadius: BorderRadius.circular(15),
-        border: Border.all(color: color, width: 2),
+        border: Border.all(color: color.withOpacity(0.5), width: 1.5),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Row(
             children: [
-              Icon(icon, color: color, size: 28),
-              const SizedBox(width: 12),
+              Icon(icon, color: color, size: 22),
+              const SizedBox(width: 10),
               Text(
                 label,
-                style: const TextStyle(color: Colors.white70, fontSize: 20),
+                style: const TextStyle(color: Colors.white70, fontSize: 16),
               ),
             ],
           ),
@@ -190,7 +248,7 @@ class GameOverOverlay extends StatelessWidget {
               overflow: TextOverflow.ellipsis,
               style: TextStyle(
                 color: color,
-                fontSize: 24,
+                fontSize: 20,
                 fontWeight: FontWeight.bold,
                 fontFamily: 'monospace',
               ),
@@ -201,34 +259,66 @@ class GameOverOverlay extends StatelessWidget {
     );
   }
 
-  Widget _buildButton(
+  Widget _buildContinueButton(
     String text,
     Color color,
     VoidCallback onPressed,
     IconData icon,
   ) {
     return SizedBox(
-      width: 130,
-      height: 60,
+      width: 140,
+      height: 50,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: color,
+          foregroundColor: Colors.black,
+          padding: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          elevation: 5,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20),
+            Text(
+              text,
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+    String text,
+    Color color,
+    VoidCallback onPressed,
+    IconData icon,
+  ) {
+    return SizedBox(
+      width: 120,
+      height: 55,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
           backgroundColor: color,
           foregroundColor: Colors.black,
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
+            borderRadius: BorderRadius.circular(20),
           ),
           elevation: 8,
-          shadowColor: color.withOpacity(0.5),
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 24),
-            const SizedBox(height: 4),
+            Icon(icon, size: 22),
             Text(
               text,
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
             ),
           ],
         ),

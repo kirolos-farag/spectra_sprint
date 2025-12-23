@@ -148,12 +148,12 @@ class Player extends PositionComponent
 
     canvas.drawPath(shadowPath, shadowPaint);
 
-    // رسم الشخصية الـ Voxel
+    // رسم الشخصية الـ Voxel في مساحة المكون (التوسيط والترجمة مطبقين تلقائياً)
     canvas.saveLayer(
-      Rect.fromLTWH(0, 0, width, height),
+      Rect.fromLTWH(0, 0, size.x, size.y),
       Paint()..color = Colors.white.withOpacity(opacity),
     );
-    _renderVoxelCharacter(canvas, playerWidth, playerHeight);
+    _renderVoxelCharacter(canvas, size.x, size.y);
     canvas.restore();
 
     // إضافة وميض محيطي (Aura)
@@ -162,11 +162,7 @@ class Player extends PositionComponent
         0.15 * (1.0 - jumpRatio) * opacity,
       )
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 10);
-    canvas.drawCircle(
-      Offset(playerWidth / 2, playerHeight / 2),
-      playerWidth * 0.9,
-      auraPaint,
-    );
+    canvas.drawCircle(Offset(size.x / 2, size.y / 2), size.x * 0.9, auraPaint);
   }
 
   Color _getCharacterBaseColor() {

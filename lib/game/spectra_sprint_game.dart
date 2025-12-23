@@ -11,6 +11,10 @@ import 'components/track_manager.dart';
 import 'components/dynamic_background.dart';
 import 'audio/audio_manager.dart';
 import '../data/game_data.dart';
+import 'package:spectra_sprint/game/stages/stage_registry.dart';
+import 'package:spectra_sprint/game/components/biome_warning.dart';
+import 'package:spectra_sprint/game/components/boss_devil.dart';
+import 'package:spectra_sprint/game/components/ufo_boss.dart';
 
 // اللعبة الرئيسية
 class SpectraSprintGame extends FlameGame
@@ -22,6 +26,7 @@ class SpectraSprintGame extends FlameGame
   late Player player;
   late TrackManager trackManager;
   late DynamicBackground background;
+  PositionComponent? currentBoss;
 
   // إحصائيات اللعبة
   double _scoreAccumulator = 0;
@@ -32,6 +37,13 @@ class SpectraSprintGame extends FlameGame
   int combo = 0;
   int lives = GameConstants.maxLives;
   bool isNewHighScore = false;
+  bool isInvulnerable = false; // حماية مؤقتة عند العودة
+
+  // خاص بالمرحلة الرابعة (Vanishing Lane)
+  int vanishingLaneIndex = -1;
+  int warningLaneIndex = -1;
+  double _vanishingTimer = 0;
+  bool _isWarningPhase = true;
 
   // الوقت والكاميرا
   double elapsedTime = 0;
@@ -39,6 +51,11 @@ class SpectraSprintGame extends FlameGame
   final Random _random = Random();
   bool _hasSwiped = false; // قفل لمنع أكثر من حركة في لمسة واحدة
   Vector2 _swipeDelta = Vector2.zero();
+
+  // إدارة المراحل
+  int currentStageIndex = 0;
+  double _lastStageTime = 0;
+  final double secondsPerStage = 30.0;
 
   // متغيرات السحب (Swipe)
 
@@ -74,6 +91,51 @@ class SpectraSprintGame extends FlameGame
     // تهيئة وتشغيل الموسيقى
     await AudioManager().init();
     await AudioManager().playBackgroundMusic();
+
+    // تعيين المرحلة الأولى
+    _updateStage();
+  }
+
+  void _updateStage() {
+    final theme = StageRegistry.getStage(currentStageIndex);
+    background.setStage(theme);
+
+    // إظهار الرسالة التحذيرية "المرعبة" أثناء تغيير المرحلة
+    // نستخدم الكاميرا (camera.viewport) لضمان بقاء الرسالة فوق كل شيء في الشاشة
+    camera.viewport.add(
+      BiomeWarning(message: theme.warningMessage, color: theme.laneLineColor)
+        ..priority = 1000,
+    );
+
+    // إدارة الزعيم (Boss)
+    if (theme.isBossStage) {
+      // تحقق مما إذا كان الوحش الحالي هو النوع الخطأ لهذه المرحلة
+      bool wrongBoss =
+          (theme.name == 'INFERNAL ABYSS' && currentBoss is! BossDevil) ||
+          (theme.name == 'GALACTIC BORDER' && currentBoss is! UfoBoss);
+
+      if (wrongBoss && currentBoss != null) {
+        currentBoss!.removeFromParent();
+        currentBoss = null;
+      }
+
+      if (currentBoss == null) {
+        if (theme.name == 'INFERNAL ABYSS') {
+          currentBoss = BossDevil();
+        } else if (theme.name == 'GALACTIC BORDER') {
+          currentBoss = UfoBoss();
+        }
+
+        if (currentBoss != null) {
+          world.add(currentBoss!);
+        }
+      }
+    } else {
+      if (currentBoss != null) {
+        currentBoss!.removeFromParent();
+        currentBoss = null;
+      }
+    }
   }
 
   @override
@@ -89,6 +151,13 @@ class SpectraSprintGame extends FlameGame
     distance += currentSpeed * dt;
     onDistanceChanged?.call(distance);
 
+    // التحقق من الانتقال للمرحلة التالية - كل 30 ثانية
+    if (elapsedTime - _lastStageTime >= secondsPerStage) {
+      currentStageIndex++;
+      _lastStageTime = elapsedTime;
+      _updateStage();
+    }
+
     // تحديث النقاط - استخدام مجمع لتجنب فقدان النقاط بسبب تقريب الوقت
     _scoreAccumulator += GameConstants.pointsPerSecond * dt;
     if (_scoreAccumulator >= 1.0) {
@@ -102,6 +171,38 @@ class SpectraSprintGame extends FlameGame
       }
 
       onScoreChanged?.call(score);
+    }
+
+    // التحقق من الحارة الخطيرة (المرحلة الرابعة)
+    if (background.currentTheme.isVanishingLane &&
+        background.safeStageTimer <= 0) {
+      _vanishingTimer -= dt;
+      if (_vanishingTimer <= 0) {
+        if (_isWarningPhase) {
+          // الانتقال من التحذير إلى الخطر
+          _isWarningPhase = false;
+          vanishingLaneIndex = warningLaneIndex;
+          _vanishingTimer = 2.0;
+        } else {
+          // الانتقال من الخطر إلى تحذير جديد
+          _isWarningPhase = true;
+          vanishingLaneIndex = -1;
+          warningLaneIndex = _random.nextInt(3);
+          _vanishingTimer = 2.0;
+        }
+      }
+
+      // إذا كان اللاعب في الحارة الخطيرة وليس في قفزة
+      if (vanishingLaneIndex != -1 &&
+          player.currentLane == vanishingLaneIndex &&
+          !player.isJumping &&
+          !isInvulnerable) {
+        onPlayerCollision();
+      }
+    } else {
+      vanishingLaneIndex = -1;
+      warningLaneIndex = -1;
+      _isWarningPhase = true;
     }
 
     // زيادة السرعة تدريجياً
@@ -170,6 +271,53 @@ class SpectraSprintGame extends FlameGame
     }
   }
 
+  // التعامل مع السقوط في الفراغ
+  void onPlayerFall() {
+    if (gameState != GameState.playing) return;
+
+    lives--;
+    onLivesChanged?.call(lives);
+    AudioManager().playCollisionSound(); // يمكن إضافة صوت سقوط لاحقاً
+
+    if (lives <= 0) {
+      gameOver();
+    } else {
+      respawnAtStage();
+    }
+  }
+
+  // إعادة المحاولة من بداية المرحلة الحالية
+  void respawnAtStage() {
+    gameState = GameState.paused;
+    pauseEngine();
+
+    // إعادة تعيين وقت المرحلة الحالية لتبدأ من جديد
+    elapsedTime = _lastStageTime;
+
+    // تنظيف العوائق والمنصات
+    trackManager.reset();
+    player.reset(); // يعيده للمنتصف والحالة الطبيعية
+
+    // إعادة السرعة لوضعها الطبيعي (مهم جداً لأنها قد تكون صفراً عند الموت)
+    currentSpeed = GameConstants.baseSpeed;
+    _shakeTimer = 0;
+
+    // استئناف بعد ثانية (تأخير بسيط للراحة)
+    Future.delayed(const Duration(seconds: 1), () {
+      gameState = GameState.playing;
+      resumeEngine();
+      _updateStage();
+
+      // تفعيل الحماية
+      isInvulnerable = true;
+      player.opacity = 0.5;
+      Future.delayed(const Duration(seconds: 2), () {
+        isInvulnerable = false;
+        player.opacity = 1.0;
+      });
+    });
+  }
+
   @override
   void onDragEnd(DragEndEvent event) {
     super.onDragEnd(event);
@@ -231,7 +379,7 @@ class SpectraSprintGame extends FlameGame
 
   // التعامل مع الإصطدام
   void onPlayerCollision() {
-    if (gameState != GameState.playing) return;
+    if (gameState != GameState.playing || isInvulnerable) return;
 
     lives--;
     onLivesChanged?.call(lives);
@@ -332,7 +480,7 @@ class SpectraSprintGame extends FlameGame
 
   // إعادة بدء اللعبة
   void restartGame() {
-    // إعادة تعيين الإحصائيات
+    // إعادة تعيين الإحصائيات والمراحل
     score = 0;
     distance = 0;
     currentSpeed = GameConstants.baseSpeed;
@@ -342,13 +490,14 @@ class SpectraSprintGame extends FlameGame
     elapsedTime = 0;
     _scoreAccumulator = 0;
     isNewHighScore = false;
+    isInvulnerable = false; // حماية مؤقتة عند العودة
+    currentStageIndex = 0;
+    _lastStageTime = 0;
 
     // إعادة تعيين المكونات
     player.reset();
     trackManager.reset();
-
-    // لم نعد نستهلك الأرواح تلقائياً، اللاعب يقرر متى يستخدمها
-    lives = GameConstants.maxLives;
+    _updateStage(); // إرجاع المشهد للمرحلة الأولى
 
     // تغيير الحالة
     gameState = GameState.playing;
@@ -359,5 +508,36 @@ class SpectraSprintGame extends FlameGame
 
     onGameStateChanged?.call(GameState.playing);
     onScoreChanged?.call(0);
+  }
+
+  // المتابعة بعد الموت (Continue)
+  void continueGame() {
+    if (GameData().extraLives > 0) {
+      GameData().useExtraLife();
+      lives = 1;
+      onLivesChanged?.call(lives);
+
+      overlays.remove('GameOver');
+      gameState = GameState.playing;
+      resumeEngine();
+      AudioManager().playBackgroundMusic();
+
+      onGameStateChanged?.call(GameState.playing);
+      respawnAtStage();
+    }
+  }
+
+  // المتابعة بمشاهدة إعلان
+  void continueWithAd() {
+    lives = 1;
+    onLivesChanged?.call(lives);
+
+    overlays.remove('GameOver');
+    gameState = GameState.playing;
+    resumeEngine();
+    AudioManager().playBackgroundMusic();
+
+    onGameStateChanged?.call(GameState.playing);
+    respawnAtStage();
   }
 }

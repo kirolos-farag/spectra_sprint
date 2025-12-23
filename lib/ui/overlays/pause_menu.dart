@@ -75,7 +75,7 @@ class _PauseMenuState extends State<PauseMenu> {
             'PAUSED',
             style: TextStyle(
               color: Colors.white,
-              fontSize: 36,
+              fontSize: 28,
               fontWeight: FontWeight.bold,
               letterSpacing: 4,
             ),
@@ -260,7 +260,7 @@ class _PauseMenuState extends State<PauseMenu> {
   ) {
     return SizedBox(
       width: 280,
-      height: 52,
+      height: 48,
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
@@ -277,9 +277,15 @@ class _PauseMenuState extends State<PauseMenu> {
           children: [
             Icon(icon, size: 28),
             const SizedBox(width: 12),
-            Text(
-              text,
-              style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+            Flexible(
+              child: Text(
+                text,
+                overflow: TextOverflow.visible,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
